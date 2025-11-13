@@ -4,9 +4,25 @@ import React, { useState, useCallback } from 'react';
 import { useVirtue } from '../providers';
 import Navigation from '../components/Navigation';
 
+type VirtueResponse = {
+    point: number;
+}
+
 // 徳ポイントをランダムに決定する関数 (50〜300の範囲)
-const calculateVirtuePoints = (): number => {
-    return Math.floor(Math.random() * (300 - 50 + 1)) + 50;
+const calculateVirtuePoints = async (text: string): Promise<number> => {
+    const request = {
+        text: text,
+    }
+    const response = await fetch('http://localhost:3030/generate', {
+        headers: {
+            "Accept": 'application/json',
+            "Content-Type": 'application/json',
+        },
+        method: 'POST',
+        body: JSON.stringify(request),
+    })
+    const pointResopnse = await response.json() as VirtueResponse;
+    return pointResopnse.point;
 };
 
 // --- 4. 徳を積む画面コンポーネント ---
@@ -45,14 +61,15 @@ const VirtueAccumulationScreen: React.FC<{
         const actionText = newActionText.trim();
         setNewActionText(''); // 入力フィールドを先にクリア
 
-        // 2. 1.5秒後に判定と結果表示を行う
-        setTimeout(() => {
-            const virtuePoints = calculateVirtuePoints();
+        // 2. 0.2秒後に判定と結果表示を行う
+        setTimeout(async () => {
+            const virtuePoints = await calculateVirtuePoints(actionText);
+            console.log(actionText, virtuePoints);
 
             const newVirtue = {
                 id: crypto.randomUUID(),
                 description: actionText,
-                virtue: virtuePoints,
+                virtue: virtuePoints || Math.floor(Math.random() * (300 - 50 + 1)) + 50,
                 date: Date.now(),
             };
 
@@ -60,7 +77,7 @@ const VirtueAccumulationScreen: React.FC<{
             handleAddVirtue(newVirtue);
 
             // 4. 結果をセットし、処理を終了
-            setLastVirtuePoints(virtuePoints); // 結果ポップアップ用に保存
+            setLastVirtuePoints(newVirtue.virtue); // 結果ポップアップ用に保存
             setIsProcessing(false); // 交信完了
 
             // 5. 結果ポップアップを5秒後に非表示にする
@@ -68,7 +85,7 @@ const VirtueAccumulationScreen: React.FC<{
                 setLastVirtuePoints(null);
             }, 5000); // 5000ms に設定
 
-        }, 1500); // 1.5秒間の交信時間
+        }, 200); // 0.2秒間の交信時間
     }, [newActionText, isProcessing, handleAddVirtue]);
 
     return (
