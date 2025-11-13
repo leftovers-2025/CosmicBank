@@ -1,10 +1,11 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { loadVirtueDataFromCookie, saveVirtueDataToCookie } from './utils/cookieStorage';
 
 // --- 型定義 ---
 type AppView = 'special' | 'balance' | 'graph' | 'accumulate' | 'lionsgate';
-interface VirtueAction {
+export interface VirtueAction {
     id: string;
     description: string;
     virtue: number;
@@ -94,13 +95,30 @@ export const VirtueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [showLionsGateScreen, setShowLionsGateScreen] = useState(isLionsGateDay());
     const [showGrasshopperScreen, setShowGrasshopperScreen] = useState(isGrasshopperGateDay());
 
-    // 💰 徳残高と履歴を管理
-    // initialVirtues を使って初期残高を計算
-    const initialVirtueBalance = 5000 + initialVirtues.reduce((sum, action) => sum + action.virtue, 0);
+    // 💰 徳残高と履歴を管理 - Cookieから読み込み、なければ初期値0
+    const [virtueBalance, setVirtueBalance] = useState(0);
+    const [accumulatedVirtues, setAccumulatedVirtues] = useState<VirtueAction[]>([]);
+    const [isInitialized, setIsInitialized] = useState(false);
 
-    const [virtueBalance, setVirtueBalance] = useState(initialVirtueBalance);
-    // accumulatedVirtues の初期値にテストデータを設定
-    const [accumulatedVirtues, setAccumulatedVirtues] = useState<VirtueAction[]>(initialVirtues);
+    // 初回マウント時にCookieからデータを読み込む
+    useEffect(() => {
+        const savedData = loadVirtueDataFromCookie();
+        if (savedData) {
+            setVirtueBalance(savedData.balance);
+            setAccumulatedVirtues(savedData.actions);
+        }
+        setIsInitialized(true);
+    }, []);
+
+    // データが変更されたらCookieに保存
+    useEffect(() => {
+        if (isInitialized) {
+            saveVirtueDataToCookie({
+                balance: virtueBalance,
+                actions: accumulatedVirtues,
+            });
+        }
+    }, [virtueBalance, accumulatedVirtues, isInitialized]);
 
     // 徳を積むアクションを追加する関数
     const handleAddVirtue = useCallback((newAction: VirtueAction) => {

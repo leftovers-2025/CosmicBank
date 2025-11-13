@@ -1,66 +1,74 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useVirtue } from '../providers';
 import Navigation from '../components/Navigation';
 import SimpleLineChart from '../components/SimpleLineChart';
+import type { VirtueAction } from '../providers';
 
-// --- ダミーデータ (グラフ用) ---
-const testVirtueData = {
-    // 期間: 日 (day) - 3時間ごとの過去24時間
-    day: [
-        { label: '00:00', value: 50 },
-        { label: '03:00', value: 55 },
-        { label: '06:00', value: 80 },
-        { label: '09:00', value: 120 },
-        { label: '12:00', value: 150 },
-        { label: '15:00', value: 130 },
-        { label: '18:00', value: 250 },
-        { label: '21:00', value: 300 },
-    ],
-    // 期間: 週 (week) - 7日間の推移
-    week: [
-        { label: '月', value: 1500 },
-        { label: '火', value: 1800 },
-        { label: '水', value: 1750 },
-        { label: '木', value: 2200 },
-        { label: '金', value: 2500 },
-        { label: '土', value: 3500 },
-        { label: '日', value: 3800 },
-    ],
-    // 期間: 月 (month) - 12ヶ月の推移
-    month: [
-        { label: '1月', value: 6000 },
-        { label: '2月', value: 5500 },
-        { label: '3月', value: 7000 },
-        { label: '4月', value: 6800 },
-        { label: '5月', value: 8200 },
-        { label: '6月', value: 8500 },
-        { label: '7月', value: 9000 },
-        { label: '8月', value: 10500 },
-        { label: '9月', value: 9500 },
-        { label: '10月', value: 11000 },
-        { label: '11月', value: 12500 },
-        { label: '12月', value: 13000 },
-    ],
-    // 期間: 年 (year) - 5年間の推移
-    year: [
-        { label: '2021年', value: 10000 },
-        { label: '2022年', value: 18000 },
-        { label: '2023年', value: 32000 },
-        { label: '2024年', value: 50000 },
-        { label: '2025年', value: 75000 },
-    ]
-};
+// --- 日ごとのデータ集計関数 ---
+interface DailyData {
+    label: string;
+    value: number;
+    date: Date;
+}
+
+/**
+ * VirtueActionの配列から日ごとの累積データを生成
+ */
+function generateDailyData(actions: VirtueAction[], days: number = 30): DailyData[] {
+    // 日付をキーにしてポイントを集計
+    const dailyMap = new Map<string, number>();
+
+    // actionsがある場合のみ集計
+    actions.forEach(action => {
+        const date = new Date(action.date);
+        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        const currentValue = dailyMap.get(dateKey) || 0;
+        dailyMap.set(dateKey, currentValue + action.virtue);
+    });
+
+    // 過去N日分のデータを生成（データがない日は0として表示）
+    const today = new Date();
+    const dailyData: DailyData[] = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+        const value = dailyMap.get(dateKey) || 0;
+        const label = `${date.getMonth() + 1}/${date.getDate()}`;
+
+        dailyData.push({
+            label,
+            value,
+            date,
+        });
+    }
+
+    return dailyData;
+}
 
 // --- 3. 徳の推移グラフ画面コンポーネント ---
-const VirtueGraphScreen: React.FC<{ currentVirtueBalance: number }> = ({ currentVirtueBalance }) => {
+const VirtueGraphScreen: React.FC<{ currentVirtueBalance: number; actions: VirtueAction[] }> = ({
+    currentVirtueBalance,
+    actions
+}) => {
     const chartRef = React.useRef<HTMLDivElement>(null);
     const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
     // 初期表示を 'week' に設定
     const [timeFrame, setTimeFrame] = useState<'day' | 'week' | 'month' | 'year'>('week');
 
-    const currentChartData = testVirtueData[timeFrame as keyof typeof testVirtueData];
+    // actionsから日ごとのデータを生成（メモ化）
+    const dailyDataMap = useMemo(() => ({
+        day: generateDailyData(actions, 7),      // 過去7日
+        week: generateDailyData(actions, 7),     // 過去7日
+        month: generateDailyData(actions, 30),   // 過去30日
+        year: generateDailyData(actions, 365),   // 過去365日
+    }), [actions]);
+
+    const currentChartData = dailyDataMap[timeFrame];
 
     // timeFrameLabel の表示は変更なし
     const timeFrameLabel = timeFrame === 'day' ? '日次' :
@@ -150,11 +158,11 @@ const VirtueGraphScreen: React.FC<{ currentVirtueBalance: number }> = ({ current
 };
 
 export default function GraphPage() {
-    const { virtueBalance } = useVirtue();
+    const { virtueBalance, accumulatedVirtues } = useVirtue();
 
     return (
         <div className="min-h-screen bg-gray-950">
-            <VirtueGraphScreen currentVirtueBalance={virtueBalance} />
+            <VirtueGraphScreen currentVirtueBalance={virtueBalance} actions={accumulatedVirtues} />
             <Navigation />
         </div>
     );
